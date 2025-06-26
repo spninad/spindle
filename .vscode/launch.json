@@ -1,0 +1,22 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:spindle}",
+            "name": "Debug spindle",
+            "program": "${workspaceFolder:spindle}/.build/debug/spindle",
+            "preLaunchTask": "swift: Build Debug spindle"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:spindle}",
+            "name": "Release spindle",
+            "program": "${workspaceFolder:spindle}/.build/release/spindle",
+            "preLaunchTask": "swift: Build Release spindle"
+        }
+    ]
+}
