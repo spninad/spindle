@@ -1,5 +1,7 @@
 import ArgumentParser
 import Foundation
+import Yams
+import TOMLKit
 
 #if canImport(FoundationNetworking)
 import FoundationNetworking
@@ -22,13 +24,237 @@ extension URLSession {
         }
     }
 }
+
 #endif
+
+// MARK: - Scripts Config and Runner
+
+struct ScriptsWrapper: Codable {
+    let scripts: [String: String]
+}
+
+enum ScriptsConfigSource: String {
+    case yaml = "spindle.yaml"
+    case json = "spindle.json"
+    case pyproject = "pyproject.toml ([tool.spindle.scripts])"
+}
+
+struct ScriptsConfigLoader {
+    static func loadScripts() -> (scripts: [String: String], source: ScriptsConfigSource)? {
+        let fm = FileManager.default
+        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath)
+
+        // 1) spindle.yaml
+        let yamlURL = cwd.appendingPathComponent("spindle.yaml")
+        if fm.fileExists(atPath: yamlURL.path) {
+            if let scripts = loadFromYAML(yamlURL) { return (scripts, .yaml) }
+        }
+
+        // 2) spindle.json
+        let jsonURL = cwd.appendingPathComponent("spindle.json")
+        if fm.fileExists(atPath: jsonURL.path) {
+            if let scripts = loadFromJSON(jsonURL) { return (scripts, .json) }
+        }
+
+        // 3) pyproject.toml -> [tool.spindle.scripts]
+        let tomlURL = cwd.appendingPathComponent("pyproject.toml")
+        if fm.fileExists(atPath: tomlURL.path) {
+            if let scripts = loadFromPyProjectTOML(tomlURL) { return (scripts, .pyproject) }
+        }
+
+        return nil
+    }
+
+    private static func loadFromYAML(_ url: URL) -> [String: String]? {
+        do {
+            let content = try String(contentsOf: url, encoding: .utf8)
+            // Prefer a typed decode first
+            if let wrapper = try? YAMLDecoder().decode(ScriptsWrapper.self, from: content) {
+                return wrapper.scripts
+            }
+            // Fallback to generic structure
+            if let any = try Yams.load(yaml: content) as? [String: Any] {
+                if let map = any["scripts"] as? [String: Any] {
+                    var out: [String: String] = [:]
+                    for (k, v) in map { if let s = v as? String { out[k] = s } }
+                    return out
+                }
+            }
+        } catch {
+            // ignore and fallback
+        }
+        return nil
+    }
+
+    private static func loadFromJSON(_ url: URL) -> [String: String]? {
+        do {
+            let data = try Data(contentsOf: url)
+            if let wrapper = try? JSONDecoder().decode(ScriptsWrapper.self, from: data) {
+                return wrapper.scripts
+            }
+            // Fallback to generic dictionary
+            let obj = try JSONSerialization.jsonObject(with: data, options: [])
+            if let dict = obj as? [String: Any], let scripts = dict["scripts"] as? [String: Any] {
+                var out: [String: String] = [:]
+                for (k, v) in scripts { if let s = v as? String { out[k] = s } }
+                return out
+            }
+        } catch {
+            // ignore and fallback
+        }
+        return nil
+    }
+
+    private struct PyProject: Decodable {
+        struct Tool: Decodable {
+            struct Spindle: Decodable { let scripts: [String: String]? }
+            let spindle: Spindle?
+        }
+        let tool: Tool?
+    }
+
+    private static func loadFromPyProjectTOML(_ url: URL) -> [String: String]? {
+        do {
+            let content = try String(contentsOf: url, encoding: .utf8)
+            let table = try TOMLTable(string: content)
+            if let py = try? TOMLDecoder().decode(PyProject.self, from: table),
+               let map = py.tool?.spindle?.scripts {
+                return map
+            }
+        } catch {
+            // ignore and fallback
+        }
+        return nil
+    }
+}
+
+enum ScriptRunner {
+    @discardableResult
+    static func run(script: String, extraArgs: [String]) throws -> Int32 {
+        // Append extra args to the command string, quoting each arg
+        let argsPart = extraArgs.map { shellEscape($0) }.joined(separator: " ")
+        let command = argsPart.isEmpty ? script : script + " " + argsPart
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/bash")
+        process.arguments = ["-lc", command]
+        process.currentDirectoryURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        process.standardOutput = FileHandle.standardOutput
+        process.standardError = FileHandle.standardError
+
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
+    private static func shellEscape(_ arg: String) -> String {
+        if arg.isEmpty { return "''" }
+        let needsQuotes = arg.contains(" ") || arg.contains("\t") || arg.contains("\n") || arg.contains("\"") || arg.contains("'") || arg.contains("$") || arg.contains("`") || arg.contains("\\")
+        if !needsQuotes { return arg }
+        // Use single quotes and escape single quotes by closing, inserting \' , and reopening
+        let escaped = arg.replacingOccurrences(of: "'", with: "'\\''")
+        return "'\(escaped)'"
+    }
+}
+
+// MARK: - CLI: run and shortcut commands
+
+struct Run: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(abstract: "Run a configured script from spindle.yaml/json/pyproject.toml")
+
+    @Argument(help: "The script name to run (as defined in your config).")
+    var name: String
+
+    @Argument(parsing: .captureForPassthrough, help: "Arguments to pass to the script")
+    var scriptArgs: [String] = []
+
+    func run() async throws {
+        guard let (scripts, source) = ScriptsConfigLoader.loadScripts() else {
+            print("No scripts configuration found. Create spindle.yaml, spindle.json, or [tool.spindle.scripts] in pyproject.toml.")
+            return
+        }
+        guard let script = scripts[name] else {
+            print("Script '\(name)' not found in \(source.rawValue). Available: \(scripts.keys.sorted().joined(separator: ", "))")
+            return
+        }
+        let status = try ScriptRunner.run(script: script, extraArgs: scriptArgs)
+        if status != 0 { throw NSError(domain: "ScriptError", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Script exited with status \(status)"]) }
+    }
+}
+
+protocol ShortcutCommand: AsyncParsableCommand {
+    static var scriptName: String { get }
+}
+
+extension ShortcutCommand {
+    static var configuration: CommandConfiguration {
+        CommandConfiguration(commandName: Self.scriptName, abstract: "Run the '\(Self.scriptName)' script if configured")
+    }
+
+    func executeShortcut(scriptArgs: [String]) async throws {
+        guard let (scripts, source) = ScriptsConfigLoader.loadScripts() else {
+            print("No scripts configuration found. Create spindle.yaml, spindle.json, or [tool.spindle.scripts] in pyproject.toml.")
+            return
+        }
+        guard let script = scripts[Self.scriptName] else {
+            print("No '\(Self.scriptName)' script found in \(source.rawValue). Use 'spindle run <name>' for other scripts. Available: \(scripts.keys.sorted().joined(separator: ", "))")
+            return
+        }
+        let status = try ScriptRunner.run(script: script, extraArgs: scriptArgs)
+        if status != 0 { throw NSError(domain: "ScriptError", code: Int(status), userInfo: [NSLocalizedDescriptionKey: "Script exited with status \(status)"]) }
+    }
+}
+
+struct StartCommand: ShortcutCommand {
+    static let scriptName = "start"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
+
+struct DevCommand: ShortcutCommand {
+    static let scriptName = "dev"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
+
+struct LaunchCommand: ShortcutCommand {
+    static let scriptName = "launch"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
+
+struct BuildCommand: ShortcutCommand {
+    static let scriptName = "build"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
+
+struct TestCommand: ShortcutCommand {
+    static let scriptName = "test"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
+
+struct DeployCommand: ShortcutCommand {
+    static let scriptName = "deploy"
+    @Argument(parsing: .captureForPassthrough) var args: [String] = []
+    func run() async throws { try await executeShortcut(scriptArgs: args) }
+}
 
 @main
 struct Spindle: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "A tool to install components from Git repositories.",
-        subcommands: [Install.self]
+        subcommands: [
+            Install.self,
+            Run.self,
+            StartCommand.self,
+            DevCommand.self,
+            LaunchCommand.self,
+            BuildCommand.self,
+            TestCommand.self,
+            DeployCommand.self
+        ]
     )
 }
 

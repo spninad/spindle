@@ -14,6 +14,7 @@ This approach is designed for developers who want to use well-crafted components
 - **Multi-Language Support:** Initial support for Python and TypeScript projects.
 - **Fully Editable Code:** Since the code lives in your project, you can modify it as you see fit. No black boxes.
 - **Simple CLI:** A straightforward and easy-to-use command-line interface.
+- **Script Runner (npm-like):** Run project commands defined in `spindle.yaml`, `spindle.json`, or `pyproject.toml` without custom shell scripts.
 
 ## 3. CLI Usage
 
@@ -33,6 +34,34 @@ This command will install the `vision_transformer` module from the `torch` direc
 
 ```bash
 spindle install GitHubUser/mango/torch/vision_transformer
+```
+
+### Run Commands (npm-like)
+
+Spindle can run project scripts defined in your repository. Configuration is discovered in this order (first match wins):
+
+1. `spindle.yaml`
+2. `spindle.json`
+3. `pyproject.toml` under `[tool.spindle.scripts]`
+
+There are two ways to run scripts:
+
+- Shortcut commands: `spindle start`, `spindle dev`, `spindle launch`, `spindle build`, `spindle test`, `spindle deploy`
+  - These names behave like npm and can be run directly if present in your config.
+- Generic command: `spindle run <script>` for any other script name.
+
+Arguments after the script name are passed through to the underlying command.
+
+Examples:
+
+```bash
+# Shortcut scripts (if defined)
+spindle start
+spindle dev -- --port 8080  # arguments after the name are forwarded
+
+# Generic scripts
+spindle run seed
+spindle run migrate -- --dry-run
 ```
 
 ## 4. Architecture and Implementation
@@ -124,6 +153,69 @@ This approach makes the system decentralized, as any repository can become a sou
   import { logger } from '@spindle/mango/utils/logger';
   ```
 
+## 6. Run Commands: Configuration and Behavior
+
+### 6.1. Configuration Formats
+
+Define a `scripts` map in one of the supported config files.
+
+- `spindle.yaml`
+
+```yaml
+scripts:
+  start: uvicorn app:app --reload
+  dev: python -m myapp
+  build: tsc -p tsconfig.json
+  test: pytest -q
+  deploy: fly deploy
+  seed: python scripts/seed.py
+```
+
+- `spindle.json`
+
+```json
+{
+  "scripts": {
+    "start": "uvicorn app:app --reload",
+    "dev": "python -m myapp",
+    "build": "tsc -p tsconfig.json",
+    "test": "pytest -q",
+    "deploy": "fly deploy",
+    "seed": "python scripts/seed.py"
+  }
+}
+```
+
+- `pyproject.toml`
+
+```toml
+[tool.spindle.scripts]
+start = "uvicorn app:app --reload"
+dev = "python -m myapp"
+build = "tsc -p tsconfig.json"
+test = "pytest -q"
+deploy = "fly deploy"
+seed = "python scripts/seed.py"
+```
+
+Precedence is: `spindle.yaml` > `spindle.json` > `pyproject.toml`. The first file found is used.
+
+### 6.2. Running Scripts
+
+- Shortcut names available without `run`: `launch`, `dev`, `start`, `build`, `test`, `deploy`.
+- Any other script requires `spindle run <name>`.
+- Arguments after the name are passed through verbatim to the script command.
+- Scripts run in the current working directory using `/bin/bash -lc "<command>"`.
+- Exit code and stdout/stderr are propagated to the terminal.
+
+Examples:
+
+```bash
+spindle start
+spindle test -- -k "fast and not slow"
+spindle run seed -- --env=local
+```
+
 ## 5. Project Roadmap
 
 - **Phase 1: Core CLI (MVP)**
@@ -137,6 +229,7 @@ This approach makes the system decentralized, as any repository can become a sou
   - [ ] Add `spindle init` command to configure the `spindle` directory and other settings in a `spindle.json` file.
   - [ ] Add `spindle list` to show all available packages from the registry.
   - [ ] Automatically update `tsconfig.json` for TypeScript projects.
+  - [x] Add npm-like script runner with YAML/JSON/TOML config support.
 
 - **Phase 3: Advanced Features**
   - [ ] Add `spindle update` to check for and apply updates to installed modules.

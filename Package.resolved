@@ -1,5 +1,5 @@
 {
-  "originHash" : "5676e1724799d01cac870d4bd3d0e63716f7858305dddd63fa01bc82064c5a04",
+  "originHash" : "abad3cd94d827015de55762991a5d696fb747bd659d3f043940735a9bf539852",
   "pins" : [
     {
       "identity" : "swift-argument-parser",
@@ -8,6 +8,24 @@
       "state" : {
         "revision" : "011f0c765fb46d9cac61bca19be0527e99c98c8b",
         "version" : "1.5.1"
+      }
+    },
+    {
+      "identity" : "tomlkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/LebJe/TOMLKit.git",
+      "state" : {
+        "revision" : "ec6198d37d495efc6acd4dffbd262cdca7ff9b3f",
+        "version" : "0.6.0"
+      }
+    },
+    {
+      "identity" : "yams",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/jpsim/Yams.git",
+      "state" : {
+        "revision" : "3d6871d5b4a5cd519adf233fbb576e0a2af71c17",
+        "version" : "5.4.0"
       }
     }
   ],
