@@ -64,6 +64,44 @@ spindle run seed
 spindle run migrate -- --dry-run
 ```
 
+### Notebook Bundling (nb_bundle)
+
+The `nb_bundle` command allows you to bundle Python dependencies into a single Jupyter notebook. This is useful when you need to share a notebook that depends on multiple Python files, but want it to be self-contained and runnable without requiring those files to be distributed separately.
+
+The bundled notebook includes:
+- `%%writefile` cells that recreate the dependent Python files
+- Directory creation cells (using `os.makedirs`) for nested file paths
+- All the original notebook cells (or converted Python script)
+
+**Usage:**
+
+```bash
+spindle nb_bundle <input> <output> <file1> [<file2> ...]
+```
+
+**Arguments:**
+- `<input>`: Input Jupyter notebook (`.ipynb`) or Python script (`.py`)
+- `<output>`: Output bundled Jupyter notebook (`.ipynb`)
+- `<file1> [<file2> ...]`: Python files to bundle (can include nested paths like `helpers/data.py`)
+
+**Options:**
+- `-w, --working-dir <path>`: Working directory for resolving relative paths
+
+**Examples:**
+
+```bash
+# Bundle a notebook with its dependencies
+spindle nb_bundle analysis.ipynb bundled_analysis.ipynb utils.py helpers/data.py
+
+# Bundle a Python script into a notebook with dependencies
+spindle nb_bundle main.py notebook.ipynb module1.py module2.py
+
+# Use a specific working directory
+spindle nb_bundle notebook.ipynb output.ipynb utils.py -w /path/to/project
+```
+
+The bundled notebook can be shared and run independently, as it will recreate all the necessary Python files when the initial cells are executed.
+
 ## 4. Architecture and Implementation
 
 ### 4.1. CLI Tool

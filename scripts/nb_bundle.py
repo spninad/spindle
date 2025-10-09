@@ -25,12 +25,12 @@ def create_writefile_cell(file_path: str, content: str) -> Dict[str, Any]:
     }
 
 
-def create_markdown_cell(text: str) -> Dict[str, Any]:
+def create_markdown_cell(text: List[str]) -> Dict[str, Any]:
     """Create a Jupyter notebook markdown cell"""
     return {
         "cell_type": "markdown",
         "metadata": {},
-        "source": [text]
+        "source": text
     }
 
 
