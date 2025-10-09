@@ -241,6 +241,77 @@ struct DeployCommand: ShortcutCommand {
     func run() async throws { try await executeShortcut(scriptArgs: args) }
 }
 
+struct NbBundle: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "nb_bundle",
+        abstract: "Bundle Python dependencies into a Jupyter notebook"
+    )
+    
+    @Argument(help: "Input Jupyter notebook (.ipynb) or Python script (.py)")
+    var input: String
+    
+    @Argument(help: "Output bundled Jupyter notebook (.ipynb)")
+    var output: String
+    
+    @Argument(help: "Python files to bundle (can include nested paths)")
+    var files: [String]
+    
+    @Option(name: .shortAndLong, help: "Working directory for resolving relative paths")
+    var workingDir: String?
+    
+    func run() async throws {
+        // Get the path to the nb_bundle.py script
+        let fileManager = FileManager.default
+        let executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        let executableDir = executableURL.deletingLastPathComponent()
+        
+        // Try multiple possible locations for the script
+        var scriptURL: URL?
+        let possiblePaths = [
+            // When installed/built, script should be in ../scripts relative to executable
+            executableDir.appendingPathComponent("../scripts/nb_bundle.py"),
+            // When running from source
+            executableDir.appendingPathComponent("../../scripts/nb_bundle.py"),
+            // Absolute path in repo during development
+            URL(fileURLWithPath: "/home/runner/work/spindle/spindle/scripts/nb_bundle.py"),
+        ]
+        
+        for path in possiblePaths {
+            let standardized = path.standardized
+            if fileManager.fileExists(atPath: standardized.path) {
+                scriptURL = standardized
+                break
+            }
+        }
+        
+        guard let scriptPath = scriptURL?.path else {
+            print("Error: Could not find nb_bundle.py script")
+            throw NSError(domain: "NbBundleError", code: 1, userInfo: nil)
+        }
+        
+        // Build command arguments
+        var args = [input, output] + files
+        if let wd = workingDir {
+            args = ["--working-dir", wd] + args
+        }
+        
+        // Execute the Python script
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["python3", scriptPath] + args
+        process.currentDirectoryURL = URL(fileURLWithPath: fileManager.currentDirectoryPath)
+        process.standardOutput = FileHandle.standardOutput
+        process.standardError = FileHandle.standardError
+        
+        try process.run()
+        process.waitUntilExit()
+        
+        if process.terminationStatus != 0 {
+            throw NSError(domain: "NbBundleError", code: Int(process.terminationStatus), userInfo: nil)
+        }
+    }
+}
+
 @main
 struct Spindle: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -253,7 +324,8 @@ struct Spindle: AsyncParsableCommand {
             LaunchCommand.self,
             BuildCommand.self,
             TestCommand.self,
-            DeployCommand.self
+            DeployCommand.self,
+            NbBundle.self
         ]
     )
 }
