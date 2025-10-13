@@ -1,93 +1,213 @@
-# Spindle
+Spindle
 
-A command-line interface (CLI) tool for installing and managing reusable source code components directly into your project.
+A command-line tool for installing and managing reusable source code components directly into your project, with npm-like script running capabilities and support for bundling Python notebooks.
 
-## Overview
+Overview
 
-Spindle is not a traditional package manager. Instead of adding a dependency to your project, it copies the source code of components (or "modules") into your local codebase, giving you full control to inspect, edit, and adapt them to your needs.
+Spindle is inspired by the philosophy of shadcn-ui. Instead of adding dependencies to your project, it copies the source code of components (or “modules”) into your local codebase, giving you full control to inspect, edit, and adapt them to your needs.
 
-Inspired by the philosophy of `shadcn-ui`, this approach is designed for developers who want to use well-crafted components without being locked into a library's specific implementation or dealing with dependency conflicts.
+This approach is designed for developers who want well-crafted components without being locked into a library’s specific implementation or dealing with dependency conflicts.
 
-## Features
+Spindle is not a traditional package manager — it installs local source into a spindle/ directory in your project so you can modify code directly.
 
-- **Local Source Installation:** Install components directly into a `spindle/` directory in your project
-- **Granular Control:** Install entire packages or individual modules
-- **Automatic Dependency Resolution:** Automatically find and install all required dependencies
-- **Multi-Language Support:** Initial support for Python and TypeScript projects
-- **Fully Editable Code:** Modify installed code as you see fit
-- **Script Runner (npm-like):** Run project commands defined in `spindle.yaml`, `spindle.json`, or `pyproject.toml`
-- **Notebook Bundling:** Bundle Python dependencies into self-contained Jupyter notebooks
+Features
+	•	Local Source Installation — Install components directly into a spindle/ directory in your project.
+	•	Granular Control — Install entire packages or individual modules.
+	•	Automatic Dependency Resolution — Automatically finds and installs all required dependencies declared by a component.
+	•	Multi-Language Support — Initial support for Python and TypeScript projects.
+	•	Fully Editable Code — Since the code lives in your project, you can modify it as needed.
+	•	Script Runner — Run project commands with npm-like shortcuts (similar to npm run).
+	•	Notebook Bundling — Bundle Python dependencies into self-contained Jupyter notebooks via the nb_bundle command.
 
-## Installation
+Installation
 
-Build from source using Swift:
+Build from source using Swift Package Manager:
 
-```bash
 swift build -c release
-```
 
-The binary will be available at `.build/release/spindle`.
+The executable will be available at:
 
-## Quick Start
+.build/release/spindle
 
-### Install Components
+Requirements
+	•	Swift 6.1 or later
+	•	Git
+	•	Python 3 (required for nb_bundle and some Python-centric features)
 
-```bash
-# Install a specific module
-spindle install GitHubUser/mango/torch/vision_transformer
+Quick Start
+
+Install Components
+
+Install components from Git repositories using the install command. Component identifiers include the Git source and the path to the component within the repository.
 
 # Install an entire package
 spindle install GitHubUser/mango/*
-```
 
-### Run Scripts
+# Install a specific module
+spindle install GitHubUser/mango/torch/vision_transformer
 
-Create a `spindle.yaml`, `spindle.json`, or add to your `pyproject.toml`:
+When you install a module, Spindle automatically installs all of its dependencies as defined in the repository’s spindle.json manifest.
 
-```yaml
-# spindle.yaml
+Using Installed Components
+
+Python:
+
+from spindle.mango.torch.vision_transformer import VisionTransformer
+
+TypeScript:
+
+import { logger } from '@spindle/mango/utils/logger';
+
+Run Scripts
+
+Spindle includes an npm-like script runner that lets you define and run project commands without custom shell scripts.
+
+Configuration
+
+Define scripts in one of three supported configuration files (checked in this order):
+	1.	spindle.yaml
+
 scripts:
   start: uvicorn app:app --reload
-  test: pytest -v
+  dev: python -m myapp
+  build: tsc -p tsconfig.json
+  test: pytest -q
   deploy: fly deploy
-```
+  seed: python scripts/seed.py
 
-Then run:
+	2.	spindle.json
 
-```bash
-spindle start
-spindle test
-spindle run deploy
-```
+{
+  "scripts": {
+    "start": "uvicorn app:app --reload",
+    "dev": "python -m myapp",
+    "build": "tsc -p tsconfig.json",
+    "test": "pytest -q",
+    "deploy": "fly deploy",
+    "seed": "python scripts/seed.py"
+  }
+}
 
-### Bundle Notebooks
+	3.	pyproject.toml
 
-Bundle Python dependencies into a single, self-contained Jupyter notebook:
+[tool.spindle.scripts]
+start = "uvicorn app:app --reload"
+dev = "python -m myapp"
+build = "tsc -p tsconfig.json"
+test = "pytest -q"
+deploy = "fly deploy"
+seed = "python scripts/seed.py"
 
-```bash
+The first file found is used.
+
+Running Scripts
+
+There are two ways to run scripts:
+
+Shortcut commands — run directly without run:
+	•	spindle start
+	•	spindle dev
+	•	spindle launch
+	•	spindle build
+	•	spindle test
+	•	spindle deploy
+
+Generic command — for any other script name:
+	•	spindle run <script-name>
+
+Passing Arguments
+
+Arguments after the script name are passed through to the underlying command. Example:
+
+# Shortcut scripts with arguments
+spindle dev -- --port 8080
+spindle test -- -k "fast and not slow"
+
+# Generic scripts with arguments
+spindle run migrate -- --dry-run
+spindle run deploy -- --env=production
+
+Scripts run in the current working directory using /bin/bash -lc "<command>", and exit codes are propagated to the terminal.
+
+Notebook Bundling
+
+Bundle Python dependencies and local files into a single, self-contained Jupyter notebook:
+
 spindle nb_bundle analysis.ipynb bundled.ipynb utils.py helpers/data.py
-```
 
-The bundled notebook can be shared and run independently, as it will recreate all the necessary Python files when executed.
+The bundled notebook is built so it can recreate the necessary Python files when executed, making it portable and shareable.
 
-## Documentation
+Commands
+	•	spindle install <component> — Install a component from a Git repository (module or package).
+	•	spindle run <script> — Run a configured script.
+	•	Shortcut scripts: spindle start, spindle dev, spindle launch, spindle build, spindle test, spindle deploy.
+	•	spindle nb_bundle <input> <output> <files...> — Bundle Python files into a Jupyter notebook.
 
-- [Full Specification](SPEC.md) - Complete technical specification
-- [Notebook Bundling Guide](docs/nb_bundle.md) - Detailed guide for the `nb_bundle` command
+Usage Examples
 
-## Commands
+Complete Workflow (Python project)
+	1.	Create spindle.yaml:
 
-- `spindle install <component>` - Install a component from a Git repository
-- `spindle run <script>` - Run a configured script
-- `spindle start`, `dev`, `launch`, `build`, `test`, `deploy` - Shortcut commands for common scripts
-- `spindle nb_bundle <input> <output> <files...>` - Bundle Python files into a Jupyter notebook
+scripts:
+  dev: python -m uvicorn app:app --reload --port 8000
+  test: pytest tests/ -v
+  lint: ruff check .
+  format: black .
+  migrate: alembic upgrade head
 
-## Requirements
+	2.	Run:
 
-- Swift 6.1 or later
-- Git
-- Python 3 (for nb_bundle command)
+spindle dev
+spindle test
+spindle dev -- --port 3000
 
-## License
+TypeScript project
 
-See LICENSE file for details.
+scripts:
+  dev: tsx watch src/index.ts
+  build: tsc -p tsconfig.json
+  test: vitest
+  lint: eslint src/
+  format: prettier --write src/
+
+Component Manifest Format
+
+Repositories that provide components must include a spindle.json manifest at their root:
+
+{
+  "name": "mango-components",
+  "components": {
+    "torch/transformer": {
+      "files": ["python/mango/torch/transformer.py"],
+      "dependencies": []
+    },
+    "torch/vision_transformer": {
+      "files": ["python/mango/torch/vision_transformer.py"],
+      "dependencies": ["torch/transformer"]
+    },
+    "utils/logger": {
+      "files": ["typescript/mango/utils/logger.ts"],
+      "dependencies": []
+    }
+  }
+}
+
+Fields:
+	•	name — A descriptive name for the component collection.
+	•	components — An object where each key is a unique identifier for a component.
+	•	files — An array of source file paths relative to the repository root.
+	•	dependencies — An array of other component identifiers from the same repository.
+
+Authentication
+
+For private repositories, Spindle supports two methods:
+	1.	GitHub API (recommended for CI): set the GITHUB_TOKEN environment variable.
+	2.	Git Clone (fallback): uses your local Git credentials.
+
+Documentation
+	•	Full Specification — Complete technical specification.
+	•	Notebook Bundling Guide — Detailed guide for the nb_bundle command.
+
+License
+
+See the repository LICENSE file for details.
