@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+spindle/__init__.py
+spindle/cli.py
+spindle/config.py
+spindle/install.py
+spindle/runner.py
+spindle_cli.egg-info/PKG-INFO
+spindle_cli.egg-info/SOURCES.txt
+spindle_cli.egg-info/dependency_links.txt
+spindle_cli.egg-info/entry_points.txt
+spindle_cli.egg-info/requires.txt
+spindle_cli.egg-info/top_level.txt

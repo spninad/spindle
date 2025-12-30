@@ -1,0 +1,91 @@
+Metadata-Version: 2.4
+Name: spindle-cli
+Version: 0.1.0
+Summary: A CLI tool for installing and managing reusable source code components with npm-like script running
+License-Expression: MIT
+Keywords: cli,package-manager,components,scripts
+Classifier: Development Status :: 3 - Alpha
+Classifier: Environment :: Console
+Classifier: Intended Audience :: Developers
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+Requires-Dist: click>=8.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: tomli>=2.0; python_version < "3.11"
+Requires-Dist: requests>=2.28
+Provides-Extra: dev
+Requires-Dist: pytest>=7.0; extra == "dev"
+Requires-Dist: ruff>=0.1; extra == "dev"
+
+# Spindle CLI (Python)
+
+A command-line tool for installing and managing reusable source code components directly into your project, with npm-like script running capabilities.
+
+## Installation
+
+```bash
+pip install spindle-cli
+```
+
+Or install from source:
+
+```bash
+cd python
+pip install -e .
+```
+
+## Usage
+
+### Installing Components
+
+Install components from Git repositories:
+
+```bash
+# Install an entire package
+spindle install GitHubUser/mango/*
+
+# Install a specific module
+spindle install GitHubUser/mango/torch/vision_transformer
+```
+
+### Running Scripts
+
+Define scripts in `spindle.yaml`, `spindle.json`, or `pyproject.toml`:
+
+```yaml
+# spindle.yaml
+scripts:
+  start: uvicorn app:app --reload
+  dev: python -m myapp
+  test: pytest -q
+```
+
+Run scripts:
+
+```bash
+# Shortcut commands
+spindle start
+spindle dev
+spindle test
+
+# Generic command
+spindle run <script-name>
+
+# With arguments
+spindle test -- -k "fast"
+```
+
+## Configuration
+
+Scripts can be defined in (checked in this order):
+
+1. `spindle.yaml`
+2. `spindle.json`
+3. `pyproject.toml` under `[tool.spindle.scripts]`
+
+See the main README.md for full documentation.
