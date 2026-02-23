@@ -1,3 +1,0 @@
-[console_scripts]
-sp = spindle.cli:main
-spindle = spindle.cli:main
