@@ -29,13 +29,10 @@ extension URLSession {
 
 // MARK: - Scripts Config and Runner
 
-struct ScriptsWrapper: Codable {
-    let scripts: [String: String]
-}
-
 enum ScriptsConfigSource: String {
     case yaml = "spindle.yaml"
     case json = "spindle.json"
+    case toml = "spindle.toml"
     case pyproject = "pyproject.toml ([tool.spindle.scripts])"
 }
 
@@ -47,61 +44,36 @@ struct ScriptsConfigLoader {
         // 1) spindle.yaml
         let yamlURL = cwd.appendingPathComponent("spindle.yaml")
         if fm.fileExists(atPath: yamlURL.path) {
-            if let scripts = loadFromYAML(yamlURL) { return (scripts, .yaml) }
+            if let manifest = try? ManifestLoader.loadManifest(from: cwd),
+               let scripts = manifest.scripts, !scripts.isEmpty {
+                return (scripts, .yaml)
+            }
         }
 
         // 2) spindle.json
         let jsonURL = cwd.appendingPathComponent("spindle.json")
         if fm.fileExists(atPath: jsonURL.path) {
-            if let scripts = loadFromJSON(jsonURL) { return (scripts, .json) }
+            if let manifest = try? ManifestLoader.loadManifest(from: cwd),
+               let scripts = manifest.scripts, !scripts.isEmpty {
+                return (scripts, .json)
+            }
         }
 
-        // 3) pyproject.toml -> [tool.spindle.scripts]
-        let tomlURL = cwd.appendingPathComponent("pyproject.toml")
+        // 3) spindle.toml
+        let tomlURL = cwd.appendingPathComponent("spindle.toml")
         if fm.fileExists(atPath: tomlURL.path) {
-            if let scripts = loadFromPyProjectTOML(tomlURL) { return (scripts, .pyproject) }
+            if let manifest = try? ManifestLoader.loadManifest(from: cwd),
+               let scripts = manifest.scripts, !scripts.isEmpty {
+                return (scripts, .toml)
+            }
         }
 
-        return nil
-    }
-
-    private static func loadFromYAML(_ url: URL) -> [String: String]? {
-        do {
-            let content = try String(contentsOf: url, encoding: .utf8)
-            // Prefer a typed decode first
-            if let wrapper = try? YAMLDecoder().decode(ScriptsWrapper.self, from: content) {
-                return wrapper.scripts
-            }
-            // Fallback to generic structure
-            if let any = try Yams.load(yaml: content) as? [String: Any] {
-                if let map = any["scripts"] as? [String: Any] {
-                    var out: [String: String] = [:]
-                    for (k, v) in map { if let s = v as? String { out[k] = s } }
-                    return out
-                }
-            }
-        } catch {
-            // ignore and fallback
+        // 4) pyproject.toml -> [tool.spindle.scripts]
+        let pyprojectURL = cwd.appendingPathComponent("pyproject.toml")
+        if fm.fileExists(atPath: pyprojectURL.path) {
+            if let scripts = loadFromPyProjectTOML(pyprojectURL) { return (scripts, .pyproject) }
         }
-        return nil
-    }
 
-    private static func loadFromJSON(_ url: URL) -> [String: String]? {
-        do {
-            let data = try Data(contentsOf: url)
-            if let wrapper = try? JSONDecoder().decode(ScriptsWrapper.self, from: data) {
-                return wrapper.scripts
-            }
-            // Fallback to generic dictionary
-            let obj = try JSONSerialization.jsonObject(with: data, options: [])
-            if let dict = obj as? [String: Any], let scripts = dict["scripts"] as? [String: Any] {
-                var out: [String: String] = [:]
-                for (k, v) in scripts { if let s = v as? String { out[k] = s } }
-                return out
-            }
-        } catch {
-            // ignore and fallback
-        }
         return nil
     }
 
@@ -262,7 +234,8 @@ struct Spindle: AsyncParsableCommand {
 
 struct SpindleManifest: Codable {
     let name: String
-    let components: [String: ComponentDefinition]
+    let components: [String: ComponentDefinition]?
+    let scripts: [String: String]?
 }
 
 struct ComponentDefinition: Codable {
@@ -282,6 +255,93 @@ struct ComponentIdentifier {
         self.user = parts[0]
         self.repo = parts[1]
         self.path = (parts.count > 2) ? parts[2] : "*"
+    }
+}
+
+// MARK: - Manifest Loader
+
+struct ManifestLoader {
+    static func loadManifest(from directory: URL) throws -> SpindleManifest? {
+        let fm = FileManager.default
+
+        // 1) spindle.yaml
+        let yamlURL = directory.appendingPathComponent("spindle.yaml")
+        if fm.fileExists(atPath: yamlURL.path) {
+            if let manifest = try loadFromYAML(yamlURL) { return manifest }
+        }
+
+        // 2) spindle.json
+        let jsonURL = directory.appendingPathComponent("spindle.json")
+        if fm.fileExists(atPath: jsonURL.path) {
+            if let manifest = try loadFromJSON(jsonURL) { return manifest }
+        }
+
+        // 3) spindle.toml
+        let tomlURL = directory.appendingPathComponent("spindle.toml")
+        if fm.fileExists(atPath: tomlURL.path) {
+            if let manifest = try loadFromTOML(tomlURL) { return manifest }
+        }
+
+        return nil
+    }
+
+    private static func loadFromYAML(_ url: URL) throws -> SpindleManifest? {
+        let content = try String(contentsOf: url, encoding: .utf8)
+        if let manifest = try? YAMLDecoder().decode(SpindleManifest.self, from: content) {
+            return manifest
+        }
+        // Fallback to generic structure
+        if let any = try Yams.load(yaml: content) as? [String: Any] {
+            return parseManifestDict(any)
+        }
+        return nil
+    }
+
+    private static func loadFromJSON(_ url: URL) throws -> SpindleManifest? {
+        let data = try Data(contentsOf: url)
+        if let manifest = try? JSONDecoder().decode(SpindleManifest.self, from: data) {
+            return manifest
+        }
+        // Fallback to generic dictionary
+        if let dict = try JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] {
+            return parseManifestDict(dict)
+        }
+        return nil
+    }
+
+    private static func loadFromTOML(_ url: URL) throws -> SpindleManifest? {
+        let content = try String(contentsOf: url, encoding: .utf8)
+        let table = try TOMLTable(string: content)
+        if let manifest = try? TOMLDecoder().decode(SpindleManifest.self, from: table) {
+            return manifest
+        }
+        return nil
+    }
+
+    private static func parseManifestDict(_ dict: [String: Any]) -> SpindleManifest? {
+        let name = dict["name"] as? String ?? ""
+        var components: [String: ComponentDefinition]? = nil
+        var scripts: [String: String]? = nil
+
+        if let comps = dict["components"] as? [String: Any] {
+            var parsed: [String: ComponentDefinition] = [:]
+            for (key, value) in comps {
+                if let comp = value as? [String: Any] {
+                    let files = comp["files"] as? [String] ?? []
+                    let deps = comp["dependencies"] as? [String] ?? []
+                    parsed[key] = ComponentDefinition(files: files, dependencies: deps)
+                }
+            }
+            components = parsed
+        }
+
+        if let scriptsDict = dict["scripts"] as? [String: Any] {
+            var parsed: [String: String] = [:]
+            for (k, v) in scriptsDict { if let s = v as? String { parsed[k] = s } }
+            scripts = parsed
+        }
+
+        return SpindleManifest(name: name, components: components, scripts: scripts)
     }
 }
 
@@ -308,9 +368,10 @@ struct Install: AsyncParsableCommand {
 
             try await fetchRepository(id: id, to: tempDir)
 
-            let manifestURL = tempDir.appendingPathComponent("spindle.json")
-            let data = try Data(contentsOf: manifestURL)
-            let manifest = try JSONDecoder().decode(SpindleManifest.self, from: data)
+            guard let manifest = try loadManifest(from: tempDir) else {
+                print("Error: No spindle.json, spindle.yaml, or spindle.toml found in repository.")
+                return
+            }
 
             print("Successfully fetched and parsed manifest for '\(manifest.name)'.")
 
@@ -353,11 +414,23 @@ struct Install: AsyncParsableCommand {
     }
 
     private func resolveDependencies(for componentName: String, manifest: SpindleManifest, filesToInstall: inout Set<String>, visited: inout Set<String>) throws {
+        guard let components = manifest.components else {
+            throw NSError(domain: "ResolverError", code: 1, userInfo: [NSLocalizedDescriptionKey: "No components defined in manifest."])
+        }
+
+        // Handle wildcard - install all components
+        if componentName == "*" {
+            for (name, _) in components {
+                try resolveDependencies(for: name, manifest: manifest, filesToInstall: &filesToInstall, visited: &visited)
+            }
+            return
+        }
+
         // Avoid circular dependencies
         if visited.contains(componentName) { return }
         visited.insert(componentName)
 
-        guard let component = manifest.components[componentName] else {
+        guard let component = components[componentName] else {
             throw NSError(domain: "ResolverError", code: 1, userInfo: [NSLocalizedDescriptionKey: "Component '\(componentName)' not found in manifest."])
         }
 
@@ -370,6 +443,10 @@ struct Install: AsyncParsableCommand {
         for file in component.files {
             filesToInstall.insert(file)
         }
+    }
+
+    private func loadManifest(from directory: URL) throws -> SpindleManifest? {
+        return try ManifestLoader.loadManifest(from: directory)
     }
 
     private func fetchRepository(id: ComponentIdentifier, to directory: URL) async throws {

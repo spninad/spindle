@@ -4,12 +4,19 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Set
 
 import requests
+import yaml
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:
+    import tomli as tomllib
 
 
 @dataclass
@@ -33,27 +40,95 @@ class ComponentIdentifier:
 
 @dataclass
 class ComponentDefinition:
-    """A component definition from spindle.json."""
+    """A component definition from the manifest."""
     files: list[str]
     dependencies: list[str]
 
 
 @dataclass
 class SpindleManifest:
-    """The spindle.json manifest."""
+    """The spindle manifest (from YAML, JSON, or TOML)."""
     name: str
-    components: dict[str, ComponentDefinition]
+    components: dict[str, ComponentDefinition] = field(default_factory=dict)
+    scripts: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def from_json(cls, data: dict) -> "SpindleManifest":
-        """Parse manifest from JSON data."""
+    def from_dict(cls, data: dict) -> "SpindleManifest":
+        """Parse manifest from a dictionary."""
         components = {}
         for name, comp_data in data.get("components", {}).items():
             components[name] = ComponentDefinition(
                 files=comp_data.get("files", []),
                 dependencies=comp_data.get("dependencies", []),
             )
-        return cls(name=data.get("name", ""), components=components)
+        scripts = {k: str(v) for k, v in data.get("scripts", {}).items()}
+        return cls(
+            name=data.get("name", ""),
+            components=components,
+            scripts=scripts,
+        )
+
+
+def load_manifest(directory: Path) -> Optional[SpindleManifest]:
+    """Load manifest from spindle.yaml, spindle.json, or spindle.toml."""
+    # 1) spindle.yaml
+    yaml_path = directory / "spindle.yaml"
+    if yaml_path.exists():
+        manifest = _load_manifest_yaml(yaml_path)
+        if manifest:
+            return manifest
+
+    # 2) spindle.json
+    json_path = directory / "spindle.json"
+    if json_path.exists():
+        manifest = _load_manifest_json(json_path)
+        if manifest:
+            return manifest
+
+    # 3) spindle.toml
+    toml_path = directory / "spindle.toml"
+    if toml_path.exists():
+        manifest = _load_manifest_toml(toml_path)
+        if manifest:
+            return manifest
+
+    return None
+
+
+def _load_manifest_yaml(path: Path) -> Optional[SpindleManifest]:
+    """Load manifest from YAML file."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if isinstance(data, dict):
+            return SpindleManifest.from_dict(data)
+    except Exception:
+        pass
+    return None
+
+
+def _load_manifest_json(path: Path) -> Optional[SpindleManifest]:
+    """Load manifest from JSON file."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            return SpindleManifest.from_dict(data)
+    except Exception:
+        pass
+    return None
+
+
+def _load_manifest_toml(path: Path) -> Optional[SpindleManifest]:
+    """Load manifest from TOML file."""
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        if isinstance(data, dict):
+            return SpindleManifest.from_dict(data)
+    except Exception:
+        pass
+    return None
 
 
 def install_component(identifier: str) -> bool:
@@ -74,17 +149,9 @@ def install_component(identifier: str) -> bool:
             return False
 
         # Read the manifest
-        manifest_path = temp_path / "spindle.json"
-        if not manifest_path.exists():
-            print(f"Error: No spindle.json found in repository.")
-            return False
-
-        try:
-            with open(manifest_path, encoding="utf-8") as f:
-                manifest_data = json.load(f)
-            manifest = SpindleManifest.from_json(manifest_data)
-        except Exception as e:
-            print(f"Error: Failed to parse spindle.json: {e}")
+        manifest = load_manifest(temp_path)
+        if not manifest:
+            print(f"Error: No spindle.yaml, spindle.json, or spindle.toml found in repository.")
             return False
 
         print(f"Successfully fetched and parsed manifest for '{manifest.name}'.")
