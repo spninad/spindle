@@ -4,16 +4,12 @@
 # ──────
 #   1. Build the Swift binary for each platform (macOS arm64, macOS x86_64, Linux x86_64).
 #   2. Package each binary into a tar.gz archive used by the Homebrew formula.
-#   3. Build a platform-specific Python wheel for each platform.
-#   4. Create a GitHub Release and attach all archives + wheels.
-#   5. Publish all wheels to PyPI.
+#   3. Create a GitHub Release and attach all archives.
+#   4. Open a PR against spninad/homebrew-tap with updated formula + SHA256 hashes.
 #
 # Required repository secrets
 # ───────────────────────────
-#   TAP_GITHUB_TOKEN  – Personal access token with `contents: write` on spninad/homebrew-tap
-#
-# Optional (currently disabled)
-#   PYPI_TOKEN        – API token for uploading to PyPI (https://pypi.org/manage/account/token/)
+#   TAP_GITHUB_TOKEN  – Personal access token with `contents: write` and `pull-requests: write` on spninad/homebrew-tap
 
 name: Release
 
@@ -39,17 +35,14 @@ jobs:
           - runner: macos-latest      # Apple Silicon (arm64)
             os-label: macos-arm64
             archive-suffix: macos-arm64
-            python-platform-tag: macosx_12_0_arm64
 
           - runner: macos-15-intel    # Intel (x86_64)
             os-label: macos-x86_64
             archive-suffix: macos-x86_64
-            python-platform-tag: macosx_12_0_x86_64
 
           - runner: ubuntu-latest     # Linux x86_64
             os-label: linux-x86_64
             archive-suffix: linux-x86_64
-            python-platform-tag: manylinux_2_17_x86_64
 
     steps:
       - name: Checkout
@@ -75,32 +68,6 @@ jobs:
           echo "ARCHIVE=$ARCHIVE" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
 
-      # ── Python wheel ─────────────────────────────────────────────────────────
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install build dependencies
-        run: pip install setuptools wheel
-
-      - name: Copy binary into Python package
-        run: |
-          mkdir -p python/spindle/_bin
-          cp .build/release/spindle python/spindle/_bin/spindle
-          chmod 755 python/spindle/_bin/spindle
-
-      # Build the wheel directly with pip.
-      # The binary is already in spindle/_bin/ so setup.py skips swift build.
-      # MACOSX_DEPLOYMENT_TARGET=12.0 ensures broad macOS compatibility.
-      - name: Build wheel
-        run: |
-          mkdir -p python/dist
-          cd python
-          pip wheel . -w dist/ --no-build-isolation
-        env:
-          MACOSX_DEPLOYMENT_TARGET: "12.0"
-
       - name: Upload Homebrew archive
         uses: actions/upload-artifact@v4
         with:
@@ -108,15 +75,8 @@ jobs:
           path: ${{ env.ARCHIVE }}
           if-no-files-found: error
 
-      - name: Upload Python wheel
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheel-${{ matrix.os-label }}
-          path: python/dist/*.whl
-          if-no-files-found: error
-
   # ─────────────────────────────────────────────────────────────────────────────
-  # Publish — create GitHub Release + push to PyPI
+  # Publish — create GitHub Release + open Homebrew tap PR
   # ─────────────────────────────────────────────────────────────────────────────
   publish:
     name: Publish
@@ -131,29 +91,11 @@ jobs:
           pattern: archive-*
           merge-multiple: true
 
-      - name: Download all wheels (PyPI)
-        uses: actions/download-artifact@v4
-        with:
-          path: wheels
-          pattern: wheel-*
-          merge-multiple: true
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            archives/*.tar.gz
-            wheels/*.whl
+          files: archives/*.tar.gz
           generate_release_notes: true
-
-      # PyPI publishing is currently disabled.
-      # To re-enable, uncomment the step below and add a PYPI_TOKEN repository secret.
-      # - name: Publish wheels to PyPI
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   with:
-      #     password: ${{ secrets.PYPI_TOKEN }}
-      #     packages-dir: wheels
-      #     skip-existing: true
 
       # ── Update Homebrew tap ──────────────────────────────────────────────────
       # Computes SHA256 for each platform archive, opens a PR against
