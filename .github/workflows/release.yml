@@ -44,6 +44,10 @@ jobs:
             os-label: linux-x86_64
             archive-suffix: linux-x86_64
 
+          - runner: ubuntu-24.04-arm  # Linux ARM64
+            os-label: linux-arm64
+            archive-suffix: linux-arm64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,9 +117,10 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           BRANCH="spindle-${VERSION}"
 
-          ARM64_SHA=$(sha256sum  "archives/spindle-${VERSION}-macos-arm64.tar.gz"  | awk '{print $1}')
-          X86_MAC_SHA=$(sha256sum "archives/spindle-${VERSION}-macos-x86_64.tar.gz" | awk '{print $1}')
-          LINUX_SHA=$(sha256sum  "archives/spindle-${VERSION}-linux-x86_64.tar.gz" | awk '{print $1}')
+          ARM64_SHA=$(sha256sum  "archives/spindle-${VERSION}-macos-arm64.tar.gz"   | awk '{print $1}')
+          X86_MAC_SHA=$(sha256sum "archives/spindle-${VERSION}-macos-x86_64.tar.gz"  | awk '{print $1}')
+          LINUX_X64_SHA=$(sha256sum "archives/spindle-${VERSION}-linux-x86_64.tar.gz" | awk '{print $1}')
+          LINUX_ARM_SHA=$(sha256sum "archives/spindle-${VERSION}-linux-arm64.tar.gz"  | awk '{print $1}')
 
           git clone \
             "https://x-access-token:${GH_TOKEN}@github.com/spninad/homebrew-tap.git" \
@@ -129,7 +134,8 @@ jobs:
           sed -i "s/version \".*\"/version \"${VERSION}\"/" "$FORMULA"
           sed -i "/macos-arm64\.tar\.gz/{n;s/sha256 \".*\"/sha256 \"${ARM64_SHA}\"/}" "$FORMULA"
           sed -i "/macos-x86_64\.tar\.gz/{n;s/sha256 \".*\"/sha256 \"${X86_MAC_SHA}\"/}" "$FORMULA"
-          sed -i "/linux-x86_64\.tar\.gz/{n;s/sha256 \".*\"/sha256 \"${LINUX_SHA}\"/}" "$FORMULA"
+          sed -i "/linux-arm64\.tar\.gz/{n;s/sha256 \".*\"/sha256 \"${LINUX_ARM_SHA}\"/}" "$FORMULA"
+          sed -i "/linux-x86_64\.tar\.gz/{n;s/sha256 \".*\"/sha256 \"${LINUX_X64_SHA}\"/}" "$FORMULA"
 
           git add Formula/spindle.rb
           git diff --cached --quiet && echo "Formula unchanged, skipping PR." && exit 0
