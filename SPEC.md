@@ -72,11 +72,36 @@ The CLI will be a native application written in **Swift**, using Apple's `swift-
 
 ### 4.2. Decentralized Package Sources
 
-Spindle does not rely on a central package registry. Instead, it fetches components directly from Git repositories (e.g., GitHub). Each component repository is expected to contain a `spindle.json` manifest file at its root, which defines the available components and their dependencies.
+Spindle does not rely on a central package registry. Instead, it fetches components directly from Git repositories (e.g., GitHub). Each component repository is expected to contain a manifest file at its root, which defines the available components and their dependencies.
 
-This approach makes the system decentralized, as any repository can become a source of components simply by including a `spindle.json` file.
+Spindle supports three manifest formats (checked in this order):
+1. `spindle.yaml` (recommended)
+2. `spindle.json`
+3. `spindle.toml`
 
-**Example `spindle.json` at the root of `GitHubUser/mango`:**
+This approach makes the system decentralized, as any repository can become a source of components simply by including a manifest file.
+
+**Example `spindle.yaml` at the root of `GitHubUser/mango`:**
+
+```yaml
+name: mango-components
+components:
+  torch/transformer:
+    files:
+      - python/mango/torch/transformer.py
+    dependencies: []
+  torch/vision_transformer:
+    files:
+      - python/mango/torch/vision_transformer.py
+    dependencies:
+      - torch/transformer
+  utils/logger:
+    files:
+      - typescript/mango/utils/logger.ts
+    dependencies: []
+```
+
+**Equivalent `spindle.json`:**
 
 ```json
 {
@@ -102,6 +127,7 @@ This approach makes the system decentralized, as any repository can become a sou
 - **`components`**: An object where each key is a unique identifier for a component within the repository.
 - **`files`**: An array of source file paths relative to the repository root.
 - **`dependencies`**: An array of other component identifiers *from the same repository* that this component depends on.
+- **`scripts`**: (Optional) Scripts that can be run with `spindle run`. The same manifest can define both components and scripts.
 
 ### 4.3. Installation Process
 
@@ -186,6 +212,18 @@ scripts:
 }
 ```
 
+- `spindle.toml`
+
+```toml
+[scripts]
+start = "uvicorn app:app --reload"
+dev = "python -m myapp"
+build = "tsc -p tsconfig.json"
+test = "pytest -q"
+deploy = "fly deploy"
+seed = "python scripts/seed.py"
+```
+
 - `pyproject.toml`
 
 ```toml
@@ -198,7 +236,7 @@ deploy = "fly deploy"
 seed = "python scripts/seed.py"
 ```
 
-Precedence is: `spindle.yaml` > `spindle.json` > `pyproject.toml`. The first file found is used.
+Precedence is: `spindle.yaml` > `spindle.json` > `spindle.toml` > `pyproject.toml`. The first file found is used.
 
 ### 6.2. Running Scripts
 

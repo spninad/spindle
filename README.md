@@ -61,7 +61,7 @@ Spindle includes an npm-like script runner that lets you define and run project 
 
 #### Configuration
 
-Define scripts in one of three supported configuration files (checked in this order):
+Define scripts in one of four supported configuration files (checked in this order):
 
 1. **`spindle.yaml`**
 
@@ -90,7 +90,19 @@ scripts:
 }
 ```
 
-3. **`pyproject.toml`**
+3. **`spindle.toml`**
+
+```toml
+[scripts]
+start = "uvicorn app:app --reload"
+dev = "python -m myapp"
+build = "tsc -p tsconfig.json"
+test = "pytest -q"
+deploy = "fly deploy"
+seed = "python scripts/seed.py"
+```
+
+4. **`pyproject.toml`**
 
 ```toml
 [tool.spindle.scripts]
@@ -193,7 +205,33 @@ scripts:
 
 ## Component Manifest Format
 
-Repositories that provide components must include a `spindle.json` manifest at their root:
+Repositories that provide components must include a manifest file at their root. Spindle supports three formats (checked in this order):
+
+1. **`spindle.yaml`** (recommended)
+2. **`spindle.json`**
+3. **`spindle.toml`**
+
+### YAML Example
+
+```yaml
+name: mango-components
+components:
+  torch/transformer:
+    files:
+      - python/mango/torch/transformer.py
+    dependencies: []
+  torch/vision_transformer:
+    files:
+      - python/mango/torch/vision_transformer.py
+    dependencies:
+      - torch/transformer
+  utils/logger:
+    files:
+      - typescript/mango/utils/logger.ts
+    dependencies: []
+```
+
+### JSON Example
 
 ```json
 {
@@ -215,10 +253,31 @@ Repositories that provide components must include a `spindle.json` manifest at t
 }
 ```
 
+### TOML Example
+
+```toml
+name = "mango-components"
+
+[components."torch/transformer"]
+files = ["python/mango/torch/transformer.py"]
+dependencies = []
+
+[components."torch/vision_transformer"]
+files = ["python/mango/torch/vision_transformer.py"]
+dependencies = ["torch/transformer"]
+
+[components."utils/logger"]
+files = ["typescript/mango/utils/logger.ts"]
+dependencies = []
+```
+
+### Manifest Fields
+
 - **`name`**: A descriptive name for the component collection
 - **`components`**: An object where each key is a unique identifier for a component
 - **`files`**: An array of source file paths relative to the repository root
 - **`dependencies`**: An array of other component identifiers from the same repository
+- **`scripts`**: (Optional) Scripts that can be run with `spindle run` (same file can define both components and scripts)
 
 ## Authentication
 
