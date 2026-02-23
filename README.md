@@ -32,14 +32,6 @@ Or in one line:
 brew install spninad/tap/spindle
 ```
 
-### pip
-
-```bash
-pip install spindle-cli
-```
-
-The wheel bundles a pre-compiled native binary — no Swift toolchain required.
-
 ### Build from source
 
 Requires the Swift toolchain:
@@ -63,7 +55,7 @@ spindle install GitHubUser/mango/*
 spindle install GitHubUser/mango/torch/vision_transformer
 ```
 
-The component identifier is a path that includes the Git source and the path to the component within the repository. When you install a module, Spindle automatically installs all of its dependencies as defined in the repository's `spindle.json` manifest.
+The component identifier is a path that includes the Git source and the path to the component within the repository. When you install a module, Spindle automatically installs all of its dependencies as defined in the repository's manifest file (`spindle.yaml`, `spindle.json`, or `spindle.toml`).
 
 #### Using Installed Components
 
