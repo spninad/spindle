@@ -19,13 +19,35 @@ This approach is designed for developers who want to use well-crafted components
 
 ## Installation
 
-Build from source using Swift Package Manager:
+### Homebrew (recommended)
+
+```bash
+brew tap spninad/tap
+brew install spindle
+```
+
+Or in one line:
+
+```bash
+brew install spninad/tap/spindle
+```
+
+### pip
+
+```bash
+pip install spindle-cli
+```
+
+The wheel bundles a pre-compiled native binary — no Swift toolchain required.
+
+### Build from source
+
+Requires the Swift toolchain:
 
 ```bash
 swift build -c release
+# binary at .build/release/spindle
 ```
-
-The executable will be available at `.build/release/spindle`.
 
 ## Usage
 
